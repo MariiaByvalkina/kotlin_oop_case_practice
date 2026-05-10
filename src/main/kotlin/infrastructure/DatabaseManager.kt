@@ -96,4 +96,23 @@ class DatabaseManager(dbPath: String = "durak_main.db") {
         connection.close()
         return historyList
     }
+
+    fun getGlobalRanking(): List<PlayerRecord> {
+        val rankingList = mutableListOf<PlayerRecord>()
+        val connection = DriverManager.getConnection(url)
+        val statement = connection.createStatement()
+        val resultSet = statement.executeQuery("SELECT * FROM player_stats ORDER BY wins DESC")
+
+        while (resultSet.next()) {
+            val playerId = resultSet.getString("id")
+            val winsCount = resultSet.getInt("wins")
+            val gamesCount = resultSet.getInt("games_played")
+            rankingList.add(PlayerRecord(playerId, winsCount, gamesCount))
+        }
+
+        resultSet.close()
+        statement.close()
+        connection.close()
+        return rankingList
+    }
 }

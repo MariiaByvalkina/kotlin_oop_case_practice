@@ -25,6 +25,12 @@ jobs:
         with:
           gradle-version: '9.4.1'
 
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Run tests
+        run: ./gradlew test
+
       - name: Cache Gradle dependencies
         uses: actions/cache@v4
         with:

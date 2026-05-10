@@ -2,12 +2,27 @@ package infrastructure
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import java.io.File
 
-class DatabaseTest {
+class DatabaseManagerTest {
     @Test
-    fun testGetStats() {
-        val db = DatabaseManager()
-        val stats = db.getPlayerStats("user1")
-        assertEquals("user1", stats.playerId)
+    fun testDatabaseCreation() {
+        val testDbName = "test_create.db"
+        val db = DatabaseManager(testDbName)
+
+        val file = File(testDbName)
+        assertTrue(file.exists())
+        file.delete()
+    }
+
+    @Test
+    fun testRankingEmpty() {
+        val db = DatabaseManager("test_rank.db")
+        val ranking = db.getGlobalRanking()
+
+        assertEquals(0, ranking.size)
+
+        File("test_rank.db").delete()
     }
 }

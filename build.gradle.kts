@@ -26,3 +26,10 @@ tasks.test {
 kotlin {
     jvmToolchain(21)
 }
+
+dependencies {
+    implementation("org.xerial:sqlite-jdbc:3.42.0.0")
+    
+    testImplementation(kotlin("test"))
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+}

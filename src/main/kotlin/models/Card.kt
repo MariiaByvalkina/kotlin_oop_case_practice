@@ -25,9 +25,16 @@ data class Card(
     var isTrump: Boolean = false
 ) {
     fun beats(other: Card) : Boolean {
+
         if (this.suit == other.suit) {
             return this.rank.value > other.rank.value
         }
-        return this.isTrump && !other.isTrump
+        if (this.isTrump && !other.isTrump) {
+            return true
+        }
+        if (!this.isTrump && other.isTrump) {
+            return false
+        }
+        return false
     }
 }

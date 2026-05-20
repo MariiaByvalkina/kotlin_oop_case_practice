@@ -66,4 +66,3 @@ fun main() {
     db.saveSession(session)
     println("Партия завершена.")
 }
-

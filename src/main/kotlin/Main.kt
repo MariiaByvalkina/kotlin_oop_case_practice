@@ -1,8 +1,18 @@
+import javafx.application.Application
+import gui.DurakGuiApp
 import models.*
 import logic.*
 import infrastructure.*
 
-fun main() {
+fun main(args: Array<String>) {
+    if (args.contains("--console")) {
+        runConsoleGame()
+    } else {
+        Application.launch(DurakGuiApp::class.java, *args)
+    }
+}
+
+fun runConsoleGame() {
     val db = DatabaseManager()
     val table = Table()
     val deck = Deck()
@@ -61,7 +71,6 @@ fun main() {
             println("Некорректный ввод. Введите число от 0 до ${currentPlayer.hand.size - 1}")
         }
     }
-
 
     db.saveSession(session)
     println("Партия завершена.")

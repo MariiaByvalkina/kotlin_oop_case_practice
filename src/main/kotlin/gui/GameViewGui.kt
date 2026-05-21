@@ -1,7 +1,5 @@
 package gui
 
-import javafx.animation.KeyFrame
-import javafx.animation.Timeline
 import javafx.geometry.Insets
 import javafx.geometry.Pos
 import javafx.scene.control.Button
@@ -9,7 +7,6 @@ import javafx.scene.control.Label
 import javafx.scene.control.TitledPane
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
-import javafx.util.Duration
 import models.Card
 import models.GameResult
 import models.Player
@@ -17,18 +14,22 @@ import logic.Table
 
 class GameViewGui(
     private val onCardClicked: (Card, Player) -> Unit,
-    private val onActionClicked: () -> Unit
+    private val onActionClicked: () -> Unit,
+    private val onFinishInteractionClicked: () -> Unit
 ) {
     val tableCardsHBox = HBox(15.0).apply { alignment = Pos.CENTER }
     val playerCardsHBox = HBox(10.0).apply { alignment = Pos.CENTER }
     val statusLabel = Label().apply { style = "-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #2c3e50;" }
     val infoLabel = Label().apply { style = "-fx-font-size: 13px;" }
     val scoreLabel = Label().apply { style = "-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #34495e;" }
-    val timerLabel = Label("Время хода: 00:00").apply { style = "-fx-font-size: 13px; -fx-text-fill: #e74c3c; -fx-font-weight: bold;" }
-    val aiCardsLabel = Label().apply { style = "-fx-font-size: 13px; -fx-text-fill: #7f8c8d; -fx-font-style: italic;" }
+    val activePlayerLabel = Label().apply { style = "-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #8e44ad;" }
 
     val actionButton = Button().apply {
-        style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-min-width: 220px; -fx-min-height: 40px; -fx-background-radius: 5;"
+        style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-min-width: 180px; -fx-min-height: 40px; -fx-background-radius: 5;"
+    }
+
+    val finishInteractionButton = Button("ГОТОВО (Передать ход)").apply {
+        style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-min-width: 180px; -fx-min-height: 40px; -fx-background-color: #34495e; -fx-text-fill: white; -fx-background-radius: 5;"
     }
 
     private val playersVBox = VBox(5.0).apply { padding = Insets(5.0) }
@@ -37,11 +38,9 @@ class GameViewGui(
         style = "-fx-font-size: 12px;"
     }
 
-    private var timeSeconds = 0
-    private var timeline: Timeline? = null
-
     init {
         actionButton.setOnAction { onActionClicked() }
+        finishInteractionButton.setOnAction { onFinishInteractionClicked() }
     }
 
     private fun getCardVisuals(card: Card): Pair<String, String> {
@@ -55,23 +54,6 @@ class GameViewGui(
         }
     }
 
-    fun resetTimer() {
-        timeline?.stop()
-        timeSeconds = 0
-        timerLabel.text = "Время хода: 00:00"
-        timeline = Timeline(KeyFrame(Duration.seconds(1.0), {
-            timeSeconds++
-            timerLabel.text = String.format("Время хода: %02d:%02d", timeSeconds / 60, timeSeconds % 60)
-        })).apply {
-            cycleCount = Timeline.INDEFINITE
-            play()
-        }
-    }
-
-    fun stopTimer() {
-        timeline?.stop()
-    }
-
     fun renderState(
         trump: Card,
         deckRemaining: Int,
@@ -82,31 +64,27 @@ class GameViewGui(
         isUserAttacking: Boolean,
         modeName: String
     ) {
-        val user = allPlayers[0]
-        val ai = allPlayers[1]
-
         val (trumpSymbol, trumpColor) = getCardVisuals(trump)
         infoLabel.text = "Режим: $modeName | Козырь: ${trump.rank} $trumpSymbol | В колоде: $deckRemaining"
         infoLabel.style = "-fx-font-size: 13px; -fx-text-fill: $trumpColor; -fx-font-weight: bold;"
 
+        activePlayerLabel.text = "ТЕКУЩИЙ ИГРОК: ${activePlayer.name}"
+
         if (isUserAttacking) {
-            statusLabel.text = "ТВОЙ ХОД: Выбери карту из руки, чтобы атаковать"
-            actionButton.text = if (table.slots.isEmpty()) "Нечем ходить (Пас)" else "БИТО (Завершить ход)"
-            actionButton.style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-min-width: 220px; -fx-min-height: 40px; -fx-background-color: #2ecc71; -fx-text-fill: white;"
+            statusLabel.text = "АТАКА: Выложи одну или несколько карт одного достоинства, затем нажми 'ГОТОВО'"
+            actionButton.text = if (table.slots.isEmpty()) "Пропустить ход" else "БИТО (Очистить стол)"
+            actionButton.style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-min-width: 180px; -fx-min-height: 40px; -fx-background-color: #2ecc71; -fx-text-fill: white;"
         } else {
-            statusLabel.text = "ЗАЩИТА: Нажми на карту в руке, чтобы побить карту на столе"
+            statusLabel.text = "ЗАЩИТА: Отбей карты на столе, затем нажми 'ГОТОВО' для подтверждения"
             actionButton.text = "ВЗЯТЬ КАРТЫ СО СТОЛА"
-            actionButton.style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-min-width: 220px; -fx-min-height: 40px; -fx-background-color: #e74c3c; -fx-text-fill: white;"
+            actionButton.style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-min-width: 180px; -fx-min-height: 40px; -fx-background-color: #e74c3c; -fx-text-fill: white;"
         }
 
-        scoreLabel.text = "Раунд: $roundCount | Карт у соперника: ${ai.hand.size}"
-        aiCardsLabel.text = "Соперник: ${ai.name} (" + ai.hand.joinToString { "🎴" } + ")"
-
-        resetTimer()
+        scoreLabel.text = "Раунд: $roundCount"
 
         playersVBox.children.clear()
         allPlayers.forEach { player ->
-            val statsText = "${player.name} [ID: ${player.id}] — Карт: ${player.hand.size}"
+            val statsText = "${player.name} [ID: ${player.id}] — Карт на руках: ${player.hand.size}"
             playersVBox.children.add(Label(statsText).apply { style = "-fx-padding: 2px 0;" })
         }
 
@@ -133,7 +111,7 @@ class GameViewGui(
         }
 
         playerCardsHBox.children.clear()
-        user.hand.forEach { card ->
+        activePlayer.hand.forEach { card ->
             val (suitSymbol, suitColor) = getCardVisuals(card)
             val btnText = "${card.rank}\n$suitSymbol${if (card.isTrump) "\n★" else ""}"
 
@@ -146,36 +124,34 @@ class GameViewGui(
                 style = cardStyle
                 setOnMouseEntered { this.style = cardStyle + "-fx-background-color: #f1f2f6; -fx-cursor: hand;" }
                 setOnMouseExited { this.style = cardStyle }
-                setOnAction { onCardClicked(card, user) }
+                setOnAction { onCardClicked(card, activePlayer) }
             }
             playerCardsHBox.children.add(cardBtn)
         }
     }
 
     fun renderGameOver(result: GameResult) {
-        stopTimer()
-
-        // Преобразуем объект результата в понятный для человека текст
         val resultText = result.toString()
+        statusLabel.text = "ПАРТИЯ ЗАВЕРШЕНА!"
         val formattedResult = when {
-            resultText.contains("Winner") && resultText.contains("Игрок первый") -> "ВЫ ВЫИГРАЛИ! 🎉"
-            resultText.contains("Winner") && resultText.contains("второй") -> "ИИ ВЫИГРАЛ! Оппонент оказался сильнее."
-            resultText.contains("Draw") || resultText.contains("Ничья") -> "НИЧЬЯ! Карты закончились."
-            else -> "Игра окончена!"
+            resultText.contains("Winner") -> {
+                val nameStart = resultText.indexOf("name='") + 6
+                val nameEnd = resultText.indexOf("'", nameStart)
+                val winnerName = resultText.substring(nameStart, nameEnd)
+                "ПОБЕДИТЕЛЬ: $winnerName! 🎉"
+            }
+            else -> "НИЧЬЯ! Карты закончились."
         }
-
         statusLabel.text = formattedResult
         statusLabel.style = "-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #27ae60;"
-
         infoLabel.text = "Партия успешно сохранена в локальный реестр."
         scoreLabel.text = ""
-        timerLabel.text = ""
-        aiCardsLabel.text = ""
-
+        activePlayerLabel.text = ""
         playerCardsHBox.children.clear()
         tableCardsHBox.children.clear()
         actionButton.isDisable = true
-        actionButton.text = "Игра завершена"
-        actionButton.style = "-fx-background-color: #7f8c8d; -fx-text-fill: white; -fx-font-size: 14px;"
+        finishInteractionButton.isDisable = true
+        actionButton.text = "Игра окончена"
+        actionButton.style = "-fx-background-color: #7f8c8d; -fx-text-fill: white;"
     }
 }

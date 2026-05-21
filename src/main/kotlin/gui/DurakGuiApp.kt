@@ -4,13 +4,9 @@ import javafx.application.Application
 import javafx.geometry.Insets
 import javafx.geometry.Pos
 import javafx.scene.Scene
-import javafx.scene.control.Alert
-import javafx.scene.control.Button
-import javafx.scene.control.Label
-import javafx.scene.control.RadioButton
-import javafx.scene.control.TextField
-import javafx.scene.control.ToggleGroup
+import javafx.scene.control.*
 import javafx.scene.layout.BorderPane
+import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import javafx.stage.Stage
 import models.*
@@ -21,9 +17,7 @@ class DurakGuiApp : Application() {
     private val db = DatabaseManager()
     private val table = Table()
     private val deck = Deck()
-    private lateinit var p1: Player
-    private lateinit var p2: Player
-    private lateinit var players: List<Player>
+    private val players = mutableListOf<Player>()
     private lateinit var session: GameSession
     private lateinit var trump: Card
 
@@ -32,17 +26,20 @@ class DurakGuiApp : Application() {
     private var roundCount = 1
     private var selectedGameMode = GameMode.CLASSIC
 
+    private var isDefensePhase = false
+    private var currentTurnPlayerIdx = 0
+
     override fun start(stage: Stage) {
         primaryStage = stage
         showMenuScreen()
     }
 
     private fun showMenuScreen() {
-        val titleLabel = Label("ДУРАК — НАСТРОЙКА ПАРТИИ").apply {
-            style = "-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #2c3e50;"
+        val titleLabel = Label("ДУРАК — НАСТРОЙКА МУЛЬТИПЛЕЕРА").apply {
+            style = "-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #2c3e50;"
         }
 
-        val modeLabel = Label("Выберите режим игры:").apply { style = "-fx-font-size: 14px;" }
+        val modeLabel = Label("Режим игры:").apply { style = "-fx-font-weight: bold;" }
         val classicRadio = RadioButton("Классический").apply { isSelected = true }
         val transferRadio = RadioButton("Подкидной / Переводной")
         ToggleGroup().apply {
@@ -50,48 +47,65 @@ class DurakGuiApp : Application() {
             transferRadio.toggleGroup = this
         }
 
-        val nameLabel = Label("Ваше имя в реестре:").apply { style = "-fx-font-size: 14px;" }
-        val nameField = TextField("Игрок первый").apply { maxWidth = 200.0 }
+        val countLabel = Label("Количество игроков (живые люди):").apply { style = "-fx-font-weight: bold;" }
+        val countComboBox = ComboBox<Int>().apply {
+            items.addAll(2, 3, 4)
+            value = 2
+        }
 
-        val startBtn = Button("НАЧАТЬ ИГРУ").apply {
-            style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-background-color: #2ecc71; -fx-text-fill: white; -fx-min-width: 150px; -fx-min-height: 35px;"
+        val namesVBox = VBox(8.0).apply { alignment = Pos.CENTER }
+
+        val updatePlayerFields = { count: Int ->
+            namesVBox.children.clear()
+            for (i in 1..count) {
+                namesVBox.children.add(TextField("Игрок $i").apply { maxWidth = 200.0 })
+            }
+        }
+        updatePlayerFields(2)
+        countComboBox.setOnAction { updatePlayerFields(countComboBox.value) }
+
+        val startBtn = Button("НАЧАТЬ ПАРТИЮ").apply {
+            style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-background-color: #2ecc71; -fx-text-fill: white; -fx-min-width: 180px; -fx-min-height: 35px;"
         }
 
         startBtn.setOnAction {
             selectedGameMode = if (classicRadio.isSelected) GameMode.CLASSIC else GameMode.TRANSFERABLE
-            initGameEngine(nameField.text)
+            players.clear()
+            namesVBox.children.filterIsInstance<TextField>().forEachIndexed { idx, field ->
+                players.add(Player((idx + 1).toString(), field.text))
+            }
+            initGameEngine()
             showGameScreen()
         }
 
-        val menuLayout = VBox(20.0).apply {
+        val menuLayout = VBox(15.0).apply {
             alignment = Pos.CENTER
-            padding = Insets(40.0)
+            padding = Insets(25.0)
             style = "-fx-background-color: #f5f6fa;"
-            children.addAll(titleLabel, modeLabel, classicRadio, transferRadio, nameLabel, nameField, startBtn)
+            children.addAll(titleLabel, modeLabel, classicRadio, transferRadio, countLabel, countComboBox, Label("Имена участников:"), namesVBox, startBtn)
         }
 
         primaryStage.title = "Дурак — Главное меню"
-        primaryStage.scene = Scene(menuLayout, 450.0, 400.0)
+        primaryStage.scene = Scene(menuLayout, 450.0, 550.0)
         primaryStage.show()
     }
 
-    private fun initGameEngine(userName: String) {
+    private fun initGameEngine() {
         deck.shuffle()
-        p1 = Player("1", userName)
-        p2 = Player("2", "Игрок второй (ИИ)")
-        players = listOf(p1, p2)
-
         trump = deck.draw() ?: throw IllegalStateException("Колода пуста")
         trump.isTrump = true
 
         players.forEach { giveCards(it) }
         session = GameSession(deck, table, players, selectedGameMode, trump)
+        currentTurnPlayerIdx = session.attackerIdx
+        isDefensePhase = false
     }
 
     private fun showGameScreen() {
         gameViewGui = GameViewGui(
-            onCardClicked = { card, _ -> handleCardClick(card) },
-            onActionClicked = { handleActionClick() }
+            onCardClicked = { card, player -> handleCardClick(card, player) },
+            onActionClicked = { handleActionClick() },
+            onFinishInteractionClicked = { handleFinishInteractionClick() }
         )
 
         val topPanel = VBox(10.0).apply {
@@ -100,11 +114,10 @@ class DurakGuiApp : Application() {
             style = "-fx-background-color: #ffffff; -fx-border-color: #dcdde1; -fx-border-width: 0 0 1 0;"
             children.addAll(
                 gameViewGui.collapsiblePlayersPane,
-                gameViewGui.aiCardsLabel,
+                gameViewGui.activePlayerLabel,
                 gameViewGui.infoLabel,
                 gameViewGui.statusLabel,
-                gameViewGui.scoreLabel,
-                gameViewGui.timerLabel
+                gameViewGui.scoreLabel
             )
         }
 
@@ -114,11 +127,16 @@ class DurakGuiApp : Application() {
             children.addAll(Label("Карты на столе:").apply { style = "-fx-font-weight: bold;" }, gameViewGui.tableCardsHBox)
         }
 
+        val controlButtonsHBox = HBox(20.0).apply {
+            alignment = Pos.CENTER
+            children.addAll(gameViewGui.actionButton, gameViewGui.finishInteractionButton)
+        }
+
         val bottomPanel = VBox(15.0).apply {
             alignment = Pos.CENTER
             padding = Insets(15.0)
             style = "-fx-background-color: #ffffff; -fx-border-color: #dcdde1; -fx-border-width: 1 0 0 0;"
-            children.addAll(Label("Ваши карты:").apply { style = "-fx-font-weight: bold;" }, gameViewGui.playerCardsHBox, gameViewGui.actionButton)
+            children.addAll(Label("Ваши карты:").apply { style = "-fx-font-weight: bold;" }, gameViewGui.playerCardsHBox, controlButtonsHBox)
         }
 
         val mainLayout = BorderPane().apply {
@@ -127,117 +145,97 @@ class DurakGuiApp : Application() {
             bottom = bottomPanel
         }
 
-        updateUi()
-
-        primaryStage.title = "Дурак — Графический Интерфейс"
+        primaryStage.title = "Дурак — Игровое поле"
         primaryStage.scene = Scene(mainLayout, 800.0, 600.0)
-        primaryStage.setOnCloseRequest { gameViewGui.stopTimer() }
+        updateUi()
     }
 
-    private fun handleCardClick(selectedCard: Card) {
+    private fun handleCardClick(selectedCard: Card, player: Player) {
         try {
-            val isUserAttacking = (session.attackerIdx == 0)
-
-            session.executeMove(p1, selectedCard)
-
-            if (isUserAttacking) {
-                aiTryDefense()
-            } else {
-                if (table.slots.all { it.isBeaten() }) {
-                    aiNextMoveOrPass()
+            // Проверка возможности подкинуть несколько карт одного достоинства за раз
+            if (!isDefensePhase && table.slots.isNotEmpty()) {
+                val tableRanks = table.getAllCards().map { it.rank }.toSet()
+                if (selectedCard.rank !in tableRanks) {
+                    showError("Можно подкидывать только карты того же достоинства, что уже есть на столе!")
+                    return
                 }
             }
-            updateUi()
+
+            session.executeMove(player, selectedCard)
+            updateUi() // Мгновенно перерисовываем стол, не закрывая экран!
         } catch (e: Exception) {
             showError(e.message ?: "Ход невозможен")
         }
     }
 
+    private fun handleFinishInteractionClick() {
+        if (!isDefensePhase) {
+            // Атакующий выложил карты (одну или несколько) и нажал "Готово" -> Передаем ход дефендеру
+            if (table.slots.isEmpty()) {
+                showError("Вы должны выложить хотя бы одну карту для атаки!")
+                return
+            }
+            isDefensePhase = true
+            currentTurnPlayerIdx = (session.attackerIdx + 1) % players.size
+        } else {
+            // Дефендер отбился и нажал "Готово" -> Возвращаем ход атакующему для подкидывания
+            val allBeaten = table.slots.all { it.isBeaten() }
+            if (!allBeaten) {
+                showError("Вы должны отбить все карты на столе перед завершением хода!")
+                return
+            }
+            isDefensePhase = false
+            currentTurnPlayerIdx = session.attackerIdx
+        }
+        showPassScreen(players[currentTurnPlayerIdx])
+    }
+
     private fun handleActionClick() {
-        val isUserAttacking = (session.attackerIdx == 0)
+        val defenderIdx = (session.attackerIdx + 1) % players.size
 
-        if (isUserAttacking) {
-            endTurnBito()
-        } else {
-            userTakeCards()
-        }
-        updateUi()
-    }
-
-    private fun endTurnBito() {
-        table.clear()
-        session.attackerIdx = 1
-        roundCount++
-        players.forEach { giveCards(it) }
-        aiTryAttack()
-    }
-
-    private fun userTakeCards() {
-        p1.hand.addAll(table.getAllCards())
-        table.clear()
-        roundCount++
-        players.forEach { giveCards(it) }
-        aiTryAttack()
-    }
-
-    private fun aiTryDefense() {
-        val unbeatenSlot = table.slots.firstOrNull { !it.isBeaten() } ?: return
-        val aiCard = p2.hand.filter { it.suit == unbeatenSlot.attackCard.suit && it.rank > unbeatenSlot.attackCard.rank }
-            .minByOrNull { it.rank }
-            ?: p2.hand.filter { it.isTrump && !unbeatenSlot.attackCard.isTrump }
-                .minByOrNull { it.rank }
-
-        if (aiCard != null) {
-            try {
-                session.executeMove(p2, aiCard)
-            } catch (e: Exception) {
-                aiTakeCards()
-            }
-        } else {
-            aiTakeCards()
-        }
-    }
-
-    private fun aiTakeCards() {
-        p2.hand.addAll(table.getAllCards())
-        table.clear()
-        session.attackerIdx = 0
-        roundCount++
-        players.forEach { giveCards(it) }
-    }
-
-    private fun aiTryAttack() {
-        if (session.attackerIdx == 1 && p2.hand.isNotEmpty()) {
-            val card = p2.hand.minByOrNull { it.rank }
-            if (card != null) {
-                try {
-                    session.executeMove(p2, card)
-                } catch (e: Exception) {
-                    endTurnBito()
-                }
-            }
-        }
-    }
-
-    private fun aiNextMoveOrPass() {
-        val existingRanks = table.slots.flatMap { listOf(it.attackCard.rank, it.defenseCard?.rank) }.filterNotNull().toSet()
-        val cardToSub = p2.hand.firstOrNull { it.rank in existingRanks }
-
-        if (cardToSub != null && selectedGameMode == GameMode.TRANSFERABLE) {
-            try {
-                session.executeMove(p2, cardToSub)
-                updateUi()
-            } catch (e: Exception) {
-                session.attackerIdx = 0
-                table.clear()
-                roundCount++
-                players.forEach { giveCards(it) }
-            }
-        } else {
-            session.attackerIdx = 0
+        if (!isDefensePhase) {
+            // Нажали "БИТО" (Атакующий пасует, раунд завершен)
             table.clear()
+            session.attackerIdx = defenderIdx
+            currentTurnPlayerIdx = session.attackerIdx
+            isDefensePhase = false
             roundCount++
             players.forEach { giveCards(it) }
+            showPassScreen(players[currentTurnPlayerIdx])
+        } else {
+            // Нажали "ВЗЯТЬ" (Дефендер сдается и забирает стол)
+            players[defenderIdx].hand.addAll(table.getAllCards())
+            table.clear()
+            session.attackerIdx = (defenderIdx + 1) % players.size
+            currentTurnPlayerIdx = session.attackerIdx
+            isDefensePhase = false
+            roundCount++
+            players.forEach { giveCards(it) }
+            showPassScreen(players[currentTurnPlayerIdx])
+        }
+    }
+
+    private fun showPassScreen(nextPlayer: Player) {
+        val label = Label("ПЕРЕДАЙТЕ УПРАВЛЕНИЕ ИГРОКУ:\n\n${nextPlayer.name}").apply {
+            style = "-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-alignment: center; -fx-text-fill: white;"
+        }
+        val btn = Button("Я ГОТОВ, ПОКАЗАТЬ КАРТЫ").apply {
+            style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-background-color: #3498db; -fx-text-fill: white; -fx-min-height: 40px;"
+        }
+
+        val passLayout = VBox(25.0).apply {
+            alignment = Pos.CENTER
+            padding = Insets(50.0)
+            style = "-fx-background-color: #2c3e50;"
+        }
+        passLayout.children.addAll(label, btn)
+
+        val oldScene = primaryStage.scene
+        primaryStage.scene = Scene(passLayout, 800.0, 600.0)
+
+        btn.setOnAction {
+            primaryStage.scene = oldScene
+            updateUi()
         }
     }
 
@@ -248,12 +246,10 @@ class DurakGuiApp : Application() {
             return
         }
 
-        val isUserAttacking = (session.attackerIdx == 0)
-        val modeName = if (selectedGameMode == GameMode.CLASSIC) "Классика" else "Подкидной"
-
+        val modeName = "Классика/Подкидной"
         gameViewGui.renderState(
-            trump, deck.remaining(), players[session.attackerIdx], table, players,
-            roundCount, isUserAttacking, modeName
+            trump, deck.remaining(), players[currentTurnPlayerIdx], table, players,
+            roundCount, !isDefensePhase, modeName
         )
     }
 

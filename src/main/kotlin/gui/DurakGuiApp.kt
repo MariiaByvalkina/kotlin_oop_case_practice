@@ -152,17 +152,18 @@ class DurakGuiApp : Application() {
 
     private fun handleCardClick(selectedCard: Card, player: Player) {
         try {
-            // Проверка возможности подкинуть несколько карт одного достоинства за раз
-            if (!isDefensePhase && table.slots.isNotEmpty()) {
-                val tableRanks = table.getAllCards().map { it.rank }.toSet()
-                if (selectedCard.rank !in tableRanks) {
-                    showError("Можно подкидывать только карты того же достоинства, что уже есть на столе!")
-                    return
-                }
-            }
+            val isTransferMove = selectedGameMode == GameMode.TRANSFERABLE &&
+                    table.slots.isNotEmpty() &&
+                    table.slots.all { !it.isBeaten() } &&
+                    table.slots.all { it.attackCard.rank == selectedCard.rank }
 
             session.executeMove(player, selectedCard)
-            updateUi() // Мгновенно перерисовываем стол, не закрывая экран!
+
+            if (isTransferMove) {
+                isDefensePhase = false
+                currentTurnPlayerIdx = session.attackerIdx
+            }
+            updateUi()
         } catch (e: Exception) {
             showError(e.message ?: "Ход невозможен")
         }
@@ -170,7 +171,6 @@ class DurakGuiApp : Application() {
 
     private fun handleFinishInteractionClick() {
         if (!isDefensePhase) {
-            // Атакующий выложил карты (одну или несколько) и нажал "Готово" -> Передаем ход дефендеру
             if (table.slots.isEmpty()) {
                 showError("Вы должны выложить хотя бы одну карту для атаки!")
                 return
@@ -178,7 +178,6 @@ class DurakGuiApp : Application() {
             isDefensePhase = true
             currentTurnPlayerIdx = (session.attackerIdx + 1) % players.size
         } else {
-            // Дефендер отбился и нажал "Готово" -> Возвращаем ход атакующему для подкидывания
             val allBeaten = table.slots.all { it.isBeaten() }
             if (!allBeaten) {
                 showError("Вы должны отбить все карты на столе перед завершением хода!")
@@ -194,7 +193,6 @@ class DurakGuiApp : Application() {
         val defenderIdx = (session.attackerIdx + 1) % players.size
 
         if (!isDefensePhase) {
-            // Нажали "БИТО" (Атакующий пасует, раунд завершен)
             table.clear()
             session.attackerIdx = defenderIdx
             currentTurnPlayerIdx = session.attackerIdx
@@ -203,7 +201,6 @@ class DurakGuiApp : Application() {
             players.forEach { giveCards(it) }
             showPassScreen(players[currentTurnPlayerIdx])
         } else {
-            // Нажали "ВЗЯТЬ" (Дефендер сдается и забирает стол)
             players[defenderIdx].hand.addAll(table.getAllCards())
             table.clear()
             session.attackerIdx = (defenderIdx + 1) % players.size
@@ -246,7 +243,7 @@ class DurakGuiApp : Application() {
             return
         }
 
-        val modeName = "Классика/Подкидной"
+        val modeName = if (selectedGameMode == GameMode.CLASSIC) "Классика" else "Подкидной/Переводной"
         gameViewGui.renderState(
             trump, deck.remaining(), players[currentTurnPlayerIdx], table, players,
             roundCount, !isDefensePhase, modeName

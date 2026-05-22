@@ -1,4 +1,5 @@
 package logic
+
 import models.*
 
 enum class GameMode { CLASSIC, TRANSFERABLE }
@@ -27,7 +28,7 @@ class GameSession(
                 table.slots.add(TableSlot(card))
                 attackerIdx = (attackerIdx + 1) % players.size
             } else {
-                val slot = table.slots.firstOrNull { !it.isBeaten() }
+                val slot = table.slots.firstOrNull { !it.isBeaten() && card.beats(it.attackCard) }
                 slot?.defenseCard = card
             }
         }
@@ -46,17 +47,18 @@ class GameSession(
 
         return if (isAttacker) {
             val fitsDefenderHand = table.slots.size < defender.hand.size
+            val isRankValid = table.slots.isEmpty() || table.getAllCards().any { it.rank == card.rank }
 
-            table.canAdd(card, defender.hand.size) && table.slots.size < 6 && fitsDefenderHand
+            table.canAdd(card, defender.hand.size) && table.slots.size < 6 && fitsDefenderHand && isRankValid
         } else {
             val isTransferPossible = mode == GameMode.TRANSFERABLE &&
                     table.slots.all { !it.isBeaten() } &&
                     table.slots.all { it.attackCard.rank == card.rank } &&
                     (table.slots.size + 1) <= players[(defenderIdx + 1) % players.size].hand.size
 
-            val currentSlot = table.slots.firstOrNull { !it.isBeaten() }
+            val currentSlot = table.slots.firstOrNull { !it.isBeaten() && card.beats(it.attackCard) }
 
-            isTransferPossible || (currentSlot != null && card.beats(currentSlot.attackCard))
+            isTransferPossible || currentSlot != null
         }
     }
 

@@ -23,7 +23,7 @@ class TableAndDeckTest {
         val validCard = Card(Suit.SPADES, Rank.SIX)
         val invalidCard = Card(Suit.DIAMONDS, Rank.ACE)
 
-        assertTrue(table.canAdd(validCard))
-        assertFalse(table.canAdd(invalidCard))
+        assertTrue(table.canAdd(validCard, 6))
+        assertFalse(table.canAdd(invalidCard, 6))
     }
 }

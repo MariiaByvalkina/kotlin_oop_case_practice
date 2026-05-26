@@ -8,6 +8,6 @@ class CardTest {
     fun testBeats() {
         val low = Card(Suit.HEARTS, Rank.SIX)
         val high = Card(Suit.HEARTS, Rank.ACE)
-        assertTrue(high.beats(low))
+        assertTrue(high.beats(low, Suit.SPADES))
     }
 }

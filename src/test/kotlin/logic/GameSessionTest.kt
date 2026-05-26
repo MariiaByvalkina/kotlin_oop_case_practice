@@ -11,7 +11,10 @@ class GameSessionTest {
         val card = Card(Suit.CLUBS, Rank.TEN)
         player.hand.add(card)
 
-        val session = GameSession(Deck(), Table(), listOf(player), GameMode.CLASSIC, card.suit)
+        val opponent = Player("1", "opponent")
+        val playersList = listOf(player, opponent)
+
+        val session = GameSession(Deck(), Table(), playersList, GameMode.CLASSIC, card.suit)
         session.executeMove(player, card)
 
         assertFalse(player.hand.contains(card))

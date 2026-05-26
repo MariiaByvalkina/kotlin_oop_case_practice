@@ -13,14 +13,13 @@ fun main() {
     val players = listOf(p1, p2)
 
     val trump = deck.draw() ?: throw IllegalStateException("Колода пуста")
-    trump.isTrump = true
 
     fun giveCards(player: Player) {
         while (player.hand.size < 6 && deck.remaining() > 0) {
             val card = deck.draw()
             if (card is Card) {
                 if (card.suit == trump.suit) {
-                    card.isTrump = true
+                    player.hand.add(card)
                 }
                 player.hand.add(card)
             } else {
@@ -31,7 +30,7 @@ fun main() {
 
     players.forEach { giveCards(it) }
 
-    val session = GameSession(deck, table, players, GameMode.CLASSIC, trump)
+    val session = GameSession(deck, table, players, GameMode.CLASSIC, trump.suit)
 
     println("Игра началась! Козырь: ${trump.rank} ${trump.suit}")
 
@@ -50,9 +49,6 @@ fun main() {
                 val selectedCard = currentPlayer.hand[index]
                 session.executeMove(currentPlayer, selectedCard)
                 println("Ход выполнен!")
-
-                session.attackerIdx = (session.attackerIdx + 1) % players.size
-
                 players.forEach { giveCards(it) }
             } catch (e: Exception) {
                 println("Ошибка: ${e.message}")

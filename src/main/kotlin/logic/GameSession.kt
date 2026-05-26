@@ -128,13 +128,20 @@ class GameSession(
         val isAttacker = player == getCurrentAttacker()
 
         return if (isAttacker) {
-
             table.canAdd(card,getCurrentDefender().hand.size)
 
         } else {
-            table.slots.any {
+            val nextPlayerIdx = (defenderIdx + 1) % players.size
+            val nextPlayerHandSize = players[nextPlayerIdx].hand.size
+
+            val isTransferPossible = mode == GameMode.TRANSFERABLE &&
+                    table.canTransfer(card, nextPlayerHandSize)
+
+            val isBeatPossible = table.slots.any {
                 !it.isBeaten() && card.beats(it.attackCard, trumpSuit)
             }
+
+            isTransferPossible || isBeatPossible
         }
     }
 

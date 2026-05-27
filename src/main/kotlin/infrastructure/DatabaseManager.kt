@@ -23,96 +23,112 @@ class DatabaseManager(dbPath: String = "durak_main.db") {
 
     fun saveSession(session: GameSession) {
         val connection = DriverManager.getConnection(url)
-        val gameResult = session.getResult()
 
-        for (player in session.players) {
-            var isWinner = false
-            if (gameResult is GameResult.Winner) {
-                if (gameResult.player.id == player.id) {
-                    isWinner = true
-                }
-            }
+        try {
+            val gameResult = session.getResult()
 
-            val checkStatement = connection.createStatement()
-            val resultSet = checkStatement.executeQuery("SELECT * FROM player_stats WHERE id = '${player.id}'")
-
-            if (resultSet.next()) {
-                val currentWins = resultSet.getInt("wins")
-                val currentGames = resultSet.getInt("games_played")
-
-                var newWins = currentWins
-                if (isWinner) {
-                    newWins = currentWins + 1
+            for (player in session.players) {
+                var isWinner = false
+                if (gameResult is GameResult.Winner) {
+                    // Исправлено: используем правильное свойство
+                    if (gameResult.player.id == player.id) {
+                        isWinner = true
+                    }
                 }
 
-                val updateStatement = connection.createStatement()
-                updateStatement.executeUpdate("UPDATE player_stats SET wins = $newWins, games_played = ${currentGames + 1} WHERE id = '${player.id}'")
-                updateStatement.close()
-            } else {
-                val insertStatement = connection.createStatement()
-                val initialWins = if (isWinner) 1 else 0
-                insertStatement.executeUpdate("INSERT INTO player_stats VALUES ('${player.id}', $initialWins, 1)")
-                insertStatement.close()
+                val checkStatement = connection.prepareStatement("SELECT * FROM player_stats WHERE id = ?")
+                checkStatement.setString(1, player.id)
+                val resultSet = checkStatement.executeQuery()
+
+                if (resultSet.next()) {
+                    val currentWins = resultSet.getInt("wins")
+                    val currentGames = resultSet.getInt("games_played")
+
+                    val newWins = if (isWinner) currentWins + 1 else currentWins
+
+                    val updateStatement = connection.prepareStatement("UPDATE player_stats SET wins = ?, games_played = ? WHERE id = ?")
+                    updateStatement.setInt(1, newWins)
+                    updateStatement.setInt(2, currentGames + 1)
+                    updateStatement.setString(3, player.id)
+                    updateStatement.executeUpdate()
+                    updateStatement.close()
+                } else {
+                    val initialWins = if (isWinner) 1 else 0
+                    val insertStatement = connection.prepareStatement("INSERT INTO player_stats VALUES (?, ?, ?)")
+                    insertStatement.setString(1, player.id)
+                    insertStatement.setInt(2, initialWins)
+                    insertStatement.setInt(3, 1)
+                    insertStatement.executeUpdate()
+                    insertStatement.close()
+                }
+                resultSet.close()
+                checkStatement.close()
             }
-            resultSet.close()
-            checkStatement.close()
+
+            val playerNamesString = session.players.joinToString(", ") { it.name }
+
+            val resultText = gameResult.toString()
+            val currentDate = LocalDateTime.now().toString()
+
+            val historyStatement = connection.prepareStatement("INSERT INTO game_history (date, result_text, players_list) VALUES (?, ?, ?)")
+            historyStatement.setString(1, currentDate)
+            historyStatement.setString(2, resultText)
+            historyStatement.setString(3, playerNamesString)
+            historyStatement.executeUpdate()
+            historyStatement.close()
+
+        } finally {
+            connection.close()
         }
-
-        var playerNamesString = ""
-        for (i in 0 until session.players.size) {
-            playerNamesString += session.players[i].name
-            if (i < session.players.size - 1) {
-                playerNamesString += ", "
-            }
-        }
-
-        val historyStatement = connection.createStatement()
-        val currentDate = LocalDateTime.now().toString()
-        historyStatement.executeUpdate("INSERT INTO game_history (date, result_text, players_list) VALUES ('$currentDate', '$gameResult', '$playerNamesString')")
-        historyStatement.close()
-
-        connection.close()
     }
 
     fun getHistory(): List<GameHistoryRecord> {
         val historyList = mutableListOf<GameHistoryRecord>()
         val connection = DriverManager.getConnection(url)
-        val statement = connection.createStatement()
-        val resultSet = statement.executeQuery("SELECT * FROM game_history")
 
-        while (resultSet.next()) {
-            historyList.add(
-                GameHistoryRecord(
-                    resultSet.getInt("id"),
-                    resultSet.getString("date"),
-                    resultSet.getString("result_text"),
-                    resultSet.getString("players_list")
+        try {
+            val statement = connection.createStatement()
+            val resultSet = statement.executeQuery("SELECT * FROM game_history ORDER BY id DESC")
+
+            while (resultSet.next()) {
+                historyList.add(
+                    GameHistoryRecord(
+                        resultSet.getInt("id"),
+                        resultSet.getString("date"),
+                        resultSet.getString("result_text"),
+                        resultSet.getString("players_list")
+                    )
                 )
-            )
+            }
+            resultSet.close()
+            statement.close()
+        } finally {
+            connection.close()
         }
-
-        resultSet.close()
-        statement.close()
-        connection.close()
         return historyList
     }
 
     fun getGlobalRanking(): List<PlayerRecord> {
         val rankingList = mutableListOf<PlayerRecord>()
         val connection = DriverManager.getConnection(url)
-        val statement = connection.createStatement()
-        val resultSet = statement.executeQuery("SELECT * FROM player_stats ORDER BY wins DESC")
 
-        while (resultSet.next()) {
-            val playerId = resultSet.getString("id")
-            val winsCount = resultSet.getInt("wins")
-            val gamesCount = resultSet.getInt("games_played")
-            rankingList.add(PlayerRecord(playerId, winsCount, gamesCount))
+        try {
+            val statement = connection.createStatement()
+            val resultSet = statement.executeQuery("SELECT * FROM player_stats ORDER BY wins DESC")
+
+            while (resultSet.next()) {
+                val playerId = resultSet.getString("id")
+                val winsCount = resultSet.getInt("wins")
+                val gamesCount = resultSet.getInt("games_played")
+                rankingList.add(PlayerRecord(playerId, winsCount, gamesCount))
+            }
+            resultSet.close()
+            statement.close()
+        } finally {
+            connection.close()
         }
-
-        resultSet.close()
-        statement.close()
-        connection.close()
         return rankingList
     }
 }
+
+data class PlayerRecord(val playerId: String, val wins: Int, val gamesPlayed: Int)

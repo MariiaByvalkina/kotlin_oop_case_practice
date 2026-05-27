@@ -21,13 +21,21 @@ enum class Rank(val value: Int) {
 
 data class Card(
     val suit: Suit,
-    val rank: Rank,
-    var isTrump: Boolean = false
+    val rank: Rank
 ) {
-    fun beats(other: Card) : Boolean {
-        if (this.suit == other.suit) {
-            return this.rank.value > other.rank.value
+
+    fun isTrump(trumpSuit: Suit): Boolean {
+        return suit == trumpSuit
+    }
+
+    fun beats(other: Card, trumpSuit: Suit): Boolean {
+        if (suit == other.suit) {
+            return rank.value > other.rank.value
         }
-        return this.isTrump && !other.isTrump
+        return isTrump(trumpSuit) && !other.isTrump(trumpSuit)
+    }
+
+    override fun toString(): String {
+        return "$rank $suit"
     }
 }

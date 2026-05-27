@@ -4,3 +4,5 @@
 
 ![Диаграмма классов](diagrams/diagram.png) 
 
+![Диаграмма классов](diagrams/gui.png) 
+

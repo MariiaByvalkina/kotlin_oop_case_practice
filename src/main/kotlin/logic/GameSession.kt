@@ -2,72 +2,157 @@ package logic
 
 import models.*
 
-enum class GameMode { CLASSIC, TRANSFERABLE }
+enum class GameMode {
+    CLASSIC,
+    TRANSFERABLE
+}
 
 class GameSession(
     private val deck: Deck,
     private val table: Table,
     val players: List<Player>,
     private val mode: GameMode,
-    var trumpCard: Card
+    private val trumpSuit: Suit
 ) {
+
     private val turnHistory = mutableListOf<String>()
-    var attackerIdx: Int = 0
 
-    fun executeMove(player: Player, card: Card) {
-        if (!validateAction(player, card)) {
-            throw IllegalArgumentException("Ход нарушает правила игры")
-        }
+    var attackerIdx = 0
+        private set
 
-        if (player == players[attackerIdx]) {
-            table.slots.add(TableSlot(card))
-        } else {
-            val isTransferMove = mode == GameMode.TRANSFERABLE && table.slots.all { !it.isBeaten() } && table.slots.all { it.attackCard.rank == card.rank }
+    private var defenderIdx = 1
 
-            if (isTransferMove) {
-                table.slots.add(TableSlot(card))
-                attackerIdx = (attackerIdx + 1) % players.size
-            } else {
-                val slot = table.slots.firstOrNull { !it.isBeaten() && card.beats(it.attackCard) }
-                slot?.defenseCard = card
-            }
-        }
-        player.hand.remove(card)
-        turnHistory.add("${player.name} сыграл ${card.rank} масти ${card.suit}")
+    fun getCurrentAttacker(): Player {
+        return players[attackerIdx]
     }
 
-    private fun validateAction(player: Player, card: Card) : Boolean {
+    fun getCurrentDefender(): Player {
+        return players[defenderIdx]
+    }
+
+    private fun isCurrentPlayer(player: Player): Boolean {
+        return player == getCurrentAttacker() || player == getCurrentDefender()
+    }
+
+    fun executeMove(player: Player, card: Card) {
+
+        if (!isCurrentPlayer(player)) {
+            throw IllegalArgumentException("Сейчас ход другого игрока")
+        }
+
+        if (!validateAction(player, card)) {
+            throw IllegalArgumentException("Ход нарушает правила")
+        }
+
+        val isAttacker = player == getCurrentAttacker()
+
+        if (isAttacker) {
+            table.addAttack(card)
+        } else {
+
+            val isTransfer = mode == GameMode.TRANSFERABLE &&
+                    table.canTransfer(card, players[(defenderIdx + 1) % players.size].hand.size)
+
+            if (isTransfer) {
+                transferAttack(card)
+            } else {
+
+                val attackSlot = table.slots.firstOrNull {
+                    !it.isBeaten() && card.beats(it.attackCard, trumpSuit)
+                }
+
+                if (attackSlot == null) {
+                    throw IllegalArgumentException("Нельзя отбить карту")
+                }
+
+                attackSlot.defenseCard = card
+            }
+        }
+
+        player.hand.remove(card)
+
+        turnHistory.add(
+            "${player.name} сыграл ${card.rank} ${card.suit}"
+        )
+    }
+
+    private fun transferAttack(card: Card) {
+
+        table.addAttack(card)
+
+        attackerIdx = (attackerIdx + 1) % players.size
+        defenderIdx = (attackerIdx + 1) % players.size
+    }
+
+    fun nextTurn() {
+        attackerIdx = defenderIdx
+        defenderIdx = (attackerIdx + 1) % players.size
+    }
+
+    fun finishRound() {
+        table.clear()
+        nextTurn()
+        refillCards()
+    }
+
+    fun takeCards() {
+
+        val defender = getCurrentDefender()
+
+        defender.hand.addAll(table.getAllCards())
+        table.clear()
+
+        attackerIdx = (defenderIdx + 1) % players.size
+        defenderIdx = (attackerIdx + 1) % players.size
+        refillCards()
+    }
+
+    private fun refillCards() {
+
+        players.forEach { player ->
+
+            while (player.hand.size < 6 && deck.remaining() > 0) {
+
+                val card = deck.draw() ?: break
+                player.hand.add(card)
+            }
+        }
+    }
+
+    private fun validateAction(player: Player, card: Card): Boolean {
+
         if (card !in player.hand) {
             return false
         }
 
-        val isAttacker = (player == players[attackerIdx])
-        val defenderIdx = (attackerIdx + 1) % players.size
-        val defender = players[defenderIdx]
+        val isAttacker = player == getCurrentAttacker()
 
         return if (isAttacker) {
-            val fitsDefenderHand = table.slots.size < defender.hand.size
-            val isRankValid = table.slots.isEmpty() || table.getAllCards().any { it.rank == card.rank }
+            table.canAdd(card,getCurrentDefender().hand.size)
 
-            table.canAdd(card, defender.hand.size) && table.slots.size < 6 && fitsDefenderHand && isRankValid
         } else {
+            val nextPlayerIdx = (defenderIdx + 1) % players.size
+            val nextPlayerHandSize = players[nextPlayerIdx].hand.size
+
             val isTransferPossible = mode == GameMode.TRANSFERABLE &&
-                    table.slots.all { !it.isBeaten() } &&
-                    table.slots.all { it.attackCard.rank == card.rank } &&
-                    (table.slots.size + 1) <= players[(defenderIdx + 1) % players.size].hand.size
+                    table.canTransfer(card, nextPlayerHandSize)
 
-            val currentSlot = table.slots.firstOrNull { !it.isBeaten() && card.beats(it.attackCard) }
+            val isBeatPossible = table.slots.any {
+                !it.isBeaten() && card.beats(it.attackCard, trumpSuit)
+            }
 
-            isTransferPossible || currentSlot != null
+            isTransferPossible || isBeatPossible
         }
     }
 
-    fun getResult() : GameResult {
-        val active = players.filter { it.hand.isNotEmpty() || deck.remaining() > 0 }
+    fun getResult(): GameResult {
+        val activePlayers = players.filter {
+            !(it.hand.isEmpty() && deck.remaining() == 0)
+        }
 
         return when {
-            active.size == 1 -> GameResult.Winner(active.first())
-            active.isEmpty() -> GameResult.Draw
+            activePlayers.size == 1 -> GameResult.Winner(activePlayers.first())
+            activePlayers.isEmpty() -> GameResult.Draw
             else -> GameResult.InProgress
         }
     }

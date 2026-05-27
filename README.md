@@ -4,4 +4,3 @@
 
 ![Диаграмма классов](diagrams/diagram.png) 
 
-![Диаграмма ](diagrams/diagram2.png)

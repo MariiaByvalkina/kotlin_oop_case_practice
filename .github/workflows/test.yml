@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, gui, database ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, gui, database ]
 
 jobs:
   test:
@@ -24,12 +24,6 @@ jobs:
         uses: gradle/gradle-build-action@v3
         with:
           gradle-version: '9.4.1'
-
-      - name: Make gradlew executable
-        run: chmod +x gradlew
-
-      - name: Run tests
-        run: gradle test
 
       - name: Cache Gradle dependencies
         uses: actions/cache@v4

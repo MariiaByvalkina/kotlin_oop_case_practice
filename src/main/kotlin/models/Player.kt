@@ -7,3 +7,9 @@ class Player(val id: String, val name: String) {
         return "Player(name='$name', cardsInHand=${hand.size})"
     }
 }
+
+data class PlayerRecord(
+    val playerId: String,
+    var wins: Int = 0,
+    var gamesPlayed: Int = 0
+)

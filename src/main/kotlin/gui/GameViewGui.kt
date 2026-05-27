@@ -26,21 +26,18 @@ class GameViewGui(
 
     val actionButton = Button().apply {
         style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-min-width: 180px; -fx-min-height: 40px; -fx-background-radius: 5;"
+        setOnAction { onActionClicked() }
     }
 
     val finishInteractionButton = Button("ГОТОВО (Передать ход)").apply {
         style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-min-width: 180px; -fx-min-height: 40px; -fx-background-color: #34495e; -fx-text-fill: white; -fx-background-radius: 5;"
+        setOnAction { onFinishInteractionClicked() }
     }
 
     private val playersVBox = VBox(5.0).apply { padding = Insets(5.0) }
     val collapsiblePlayersPane = TitledPane("Реестр игроков и Статистика", playersVBox).apply {
         isExpanded = false
         style = "-fx-font-size: 12px;"
-    }
-
-    init {
-        actionButton.setOnAction { onActionClicked() }
-        finishInteractionButton.setOnAction { onFinishInteractionClicked() }
     }
 
     private fun getCardVisuals(card: Card): Pair<String, String> {
@@ -72,7 +69,7 @@ class GameViewGui(
 
         if (isUserAttacking) {
             statusLabel.text = "АТАКА: Выложи одну или несколько карт одного достоинства, затем нажми 'ГОТОВО'"
-            actionButton.text = if (table.slots.isEmpty()) "Пропустить ход" else "БИТО (Очистить стол)"
+            actionButton.text = if (table.slots.isEmpty()) "Пропустить ход" else "БИТО"
             actionButton.style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-min-width: 180px; -fx-min-height: 40px; -fx-background-color: #2ecc71; -fx-text-fill: white;"
         } else {
             statusLabel.text = "ЗАЩИТА: Отбей карты на столе, затем нажми 'ГОТОВО' для подтверждения"
@@ -95,17 +92,17 @@ class GameViewGui(
             var btnStyle = "-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: $atkColor; -fx-background-color: #ffffff; -fx-border-color: #bdc3c7; -fx-border-radius: 5; -fx-min-width: 70px; -fx-min-height: 90px;"
 
             if (slot.defenseCard != null) {
-                val (defSymbol, defColor) = getCardVisuals(slot.defenseCard!!)
-                cardText += "\n⚔️\n${slot.defenseCard!!.rank}$defSymbol"
-                btnStyle += "-fx-border-color: #2ecc71; -fx-border-width: 2;"
+                val (defSymbol, _) = getCardVisuals(slot.defenseCard!!)
+                cardText = "$cardText\n\n${slot.defenseCard!!.rank}$defSymbol"
+                btnStyle = "$btnStyle-fx-border-color: #2ecc71; -fx-border-width: 2;"
             } else {
-                btnStyle += "-fx-border-color: #e74c3c; -fx-border-width: 1.5; -fx-background-color: #fff5f5;"
+                btnStyle = "$btnStyle-fx-border-color: #e74c3c; -fx-border-width: 1.5; -fx-background-color: #fff5f5;"
             }
 
             val btn = Button(cardText).apply {
                 isDisable = true
                 style = btnStyle
-                setStyle(style + "-fx-opacity: 1.0; -fx-text-alignment: center;")
+                style = "$btnStyle-fx-opacity: 1.0; -fx-text-alignment: center;"
             }
             tableCardsHBox.children.add(btn)
         }
@@ -113,16 +110,17 @@ class GameViewGui(
         playerCardsHBox.children.clear()
         activePlayer.hand.forEach { card ->
             val (suitSymbol, suitColor) = getCardVisuals(card)
-            val btnText = "${card.rank}\n$suitSymbol${if (card.isTrump) "\n★" else ""}"
+            val isCardTrump = card.isTrump(trump.suit)
+            val btnText = "${card.rank}\n$suitSymbol${if (isCardTrump) "\n★" else ""}"
 
             var cardStyle = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: $suitColor; -fx-min-width: 70px; -fx-min-height: 95px; -fx-background-color: #ffffff; -fx-border-color: #dcdde1; -fx-border-radius: 5; -fx-text-alignment: center;"
-            if (card.isTrump) {
-                cardStyle += "-fx-background-color: #fff9db; -fx-border-color: #f1c40f; -fx-border-width: 2;"
+            if (isCardTrump) {
+                cardStyle = "$cardStyle-fx-background-color: #fff9db; -fx-border-color: #f1c40f; -fx-border-width: 2;"
             }
 
             val cardBtn = Button(btnText).apply {
                 style = cardStyle
-                setOnMouseEntered { this.style = cardStyle + "-fx-background-color: #f1f2f6; -fx-cursor: hand;" }
+                setOnMouseEntered { this.style = "$cardStyle-fx-background-color: #f1f2f6; -fx-cursor: hand;" }
                 setOnMouseExited { this.style = cardStyle }
                 setOnAction { onCardClicked(card, activePlayer) }
             }
@@ -132,15 +130,15 @@ class GameViewGui(
 
     fun renderGameOver(result: GameResult) {
         val resultText = result.toString()
-        statusLabel.text = "ПАРТИЯ ЗАВЕРШЕНА!"
+        statusLabel.text = "ПАРТИЯ ЗАВЕРШЕНА"
         val formattedResult = when {
             resultText.contains("Winner") -> {
                 val nameStart = resultText.indexOf("name='") + 6
                 val nameEnd = resultText.indexOf("'", nameStart)
                 val winnerName = resultText.substring(nameStart, nameEnd)
-                "ПОБЕДИТЕЛЬ: $winnerName! 🎉"
+                "ПОБЕДИТЕЛЬ: $winnerName!"
             }
-            else -> "НИЧЬЯ! Карты закончились."
+            else -> "НИЧЬЯ. Карты закончились."
         }
         statusLabel.text = formattedResult
         statusLabel.style = "-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #27ae60;"
